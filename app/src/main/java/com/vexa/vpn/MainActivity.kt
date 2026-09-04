@@ -47,18 +47,10 @@ fun VexaApp(vpnViewModel: VpnViewModel) {
     var showConfig by rememberSaveable { mutableStateOf(false) }
     var message by rememberSaveable { mutableStateOf<String?>(null) }
 
-    fun connectNow() {
-        if (configText.isBlank()) {
-            showConfig = true
-            return
-        }
-        vpnViewModel.connect(configText)
-    }
-
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) connectNow()
+        if (result.resultCode == Activity.RESULT_OK) vpnViewModel.connectAutomatically()
         else message = "VPN permission is required to protect your connection."
     }
 
@@ -103,7 +95,8 @@ fun VexaApp(vpnViewModel: VpnViewModel) {
                             if (connected) vpnViewModel.disconnect()
                             else {
                                 val intent: Intent? = VpnService.prepare(context)
-                                if (intent != null) permissionLauncher.launch(intent) else connectNow()
+                                if (intent != null) permissionLauncher.launch(intent)
+                                else vpnViewModel.connectAutomatically()
                             }
                         },
                         modifier = Modifier.size(130.dp),
@@ -159,7 +152,7 @@ fun VexaApp(vpnViewModel: VpnViewModel) {
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = { showConfig = false; connectNow() }) { Text("CONNECT") }
+                    TextButton(onClick = { showConfig = false; vpnViewModel.connect(configText) }) { Text("CONNECT") }
                 },
                 dismissButton = { TextButton(onClick = { showConfig = false }) { Text("CANCEL") } }
             )
