@@ -7,26 +7,17 @@ plugins {
 android {
     namespace = "com.vexa.vpn"
     compileSdk = 35
-
     defaultConfig {
         applicationId = "com.vexa.vpn"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
-        buildConfigField("String", "VEXA_API_BASE_URL", "\"\"")
+        val apiBaseUrl = providers.gradleProperty("VEXA_API_BASE_URL").orNull ?: ""
+        buildConfigField("String", "VEXA_API_BASE_URL", "\"${apiBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
     }
-
-    buildFeatures {
-        compose = true
-        buildConfig = true
-    }
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-        isCoreLibraryDesugaringEnabled = true
-    }
+    buildFeatures { compose = true; buildConfig = true }
+    compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17; isCoreLibraryDesugaringEnabled = true }
 }
 
 dependencies {
