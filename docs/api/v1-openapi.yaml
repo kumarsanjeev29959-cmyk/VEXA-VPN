@@ -1,0 +1,136 @@
+openapi: 3.0.3
+info:
+  title: VEXA VPN API
+  version: 1.0.0
+  description: Backend contract for authentication, server discovery, device registration and WireGuard configuration delivery.
+servers:
+  - url: https://api.example.com
+paths:
+  /v1/health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /v1/servers:
+    get:
+      summary: List available VPN servers
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Server list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [servers]
+                properties:
+                  servers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VpnServer'
+  /v1/devices:
+    post:
+      summary: Register a device
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterDeviceRequest'
+      responses:
+        '201':
+          description: Device registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+  /v1/vpn/config:
+    post:
+      summary: Allocate a server and issue a device-specific WireGuard configuration
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VpnConfigRequest'
+      responses:
+        '200':
+          description: WireGuard configuration issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VpnConfigResponse'
+        '403':
+          description: Plan does not permit the requested server
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          example: ok
+    VpnServer:
+      type: object
+      required: [id, name, countryCode, city, hostname, port, protocol, premium, healthy]
+      properties:
+        id: { type: string, example: in-patna-01 }
+        name: { type: string, example: India - Patna 01 }
+        countryCode: { type: string, example: IN }
+        city: { type: string, example: Patna }
+        hostname: { type: string, example: in-patna-01.vexa.example }
+        port: { type: integer, example: 51820 }
+        protocol: { type: string, enum: [wireguard] }
+        premium: { type: boolean }
+        healthy: { type: boolean }
+        loadPercent: { type: integer, minimum: 0, maximum: 100 }
+    RegisterDeviceRequest:
+      type: object
+      required: [deviceId, publicKey]
+      properties:
+        deviceId: { type: string, minLength: 8, maxLength: 128 }
+        publicKey: { type: string, minLength: 32, maxLength: 64 }
+        deviceName: { type: string, maxLength: 100 }
+    Device:
+      type: object
+      required: [id, deviceId, publicKey]
+      properties:
+        id: { type: string }
+        deviceId: { type: string }
+        publicKey: { type: string }
+        deviceName: { type: string }
+    VpnConfigRequest:
+      type: object
+      required: [deviceId]
+      properties:
+        deviceId: { type: string }
+        serverId: { type: string, nullable: true }
+        fastest: { type: boolean, default: true }
+    VpnConfigResponse:
+      type: object
+      required: [server, config]
+      properties:
+        server:
+          $ref: '#/components/schemas/VpnServer'
+        config:
+          type: string
+          description: Complete WireGuard client configuration. Never log or persist this response in backend logs.
+        expiresAt:
+          type: string
+          format: date-time
