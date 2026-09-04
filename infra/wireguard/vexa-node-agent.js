@@ -1,4 +1,5 @@
 const http = require('node:http');
+const https = require('node:https');
 const { execFileSync } = require('node:child_process');
 
 const API_URL = (process.env.VEXA_API_URL || '').replace(/\/$/, '');
@@ -14,7 +15,8 @@ if (!API_URL || !NODE_TOKEN) {
 function request(path, method = 'GET', body) {
   return new Promise((resolve, reject) => {
     const target = new URL(`${API_URL}${path}`);
-    const req = http.request({
+    const transport = target.protocol === 'https:' ? https : http;
+    const req = transport.request({
       protocol: target.protocol,
       hostname: target.hostname,
       port: target.port || (target.protocol === 'https:' ? 443 : 80),
