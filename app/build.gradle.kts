@@ -16,6 +16,29 @@ android {
         val apiBaseUrl = providers.gradleProperty("VEXA_API_BASE_URL").orNull ?: ""
         buildConfigField("String", "VEXA_API_BASE_URL", "\"${apiBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
     }
+
+    signingConfigs {
+        create("release") {
+            val keystorePath = providers.gradleProperty("VEXA_KEYSTORE_PATH").orNull ?: System.getenv("VEXA_KEYSTORE_PATH")
+            val storePassword = providers.gradleProperty("VEXA_KEYSTORE_PASSWORD").orNull ?: System.getenv("VEXA_KEYSTORE_PASSWORD")
+            val keyAlias = providers.gradleProperty("VEXA_KEY_ALIAS").orNull ?: System.getenv("VEXA_KEY_ALIAS")
+            val keyPassword = providers.gradleProperty("VEXA_KEY_PASSWORD").orNull ?: System.getenv("VEXA_KEY_PASSWORD")
+            if (!keystorePath.isNullOrBlank() && !storePassword.isNullOrBlank() && !keyAlias.isNullOrBlank() && !keyPassword.isNullOrBlank()) {
+                storeFile = file(keystorePath)
+                this.storePassword = storePassword
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            val hasReleaseSigning = providers.gradleProperty("VEXA_KEYSTORE_PATH").isPresent || !System.getenv("VEXA_KEYSTORE_PATH").isNullOrBlank()
+            if (hasReleaseSigning) signingConfig = signingConfigs.getByName("release")
+        }
+    }
+
     buildFeatures { compose = true; buildConfig = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17; isCoreLibraryDesugaringEnabled = true }
 }
