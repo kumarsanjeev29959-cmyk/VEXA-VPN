@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: VEXA VPN API
   version: 1.0.0
-  description: Backend contract for authentication, server discovery, device registration and WireGuard configuration delivery.
+  description: Device-based backend contract for server discovery, device provisioning and WireGuard configuration delivery. End users do not log in or register with email/password.
 servers:
   - url: https://api.example.com
 paths:
@@ -20,7 +20,7 @@ paths:
     get:
       summary: List available VPN servers
       security:
-        - bearerAuth: []
+        - deviceToken: []
       responses:
         '200':
           description: Server list
@@ -36,27 +36,27 @@ paths:
                       $ref: '#/components/schemas/VpnServer'
   /v1/devices:
     post:
-      summary: Register a device
-      security:
-        - bearerAuth: []
+      summary: Provision a device without an end-user account
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RegisterDeviceRequest'
+              $ref: '#/components/schemas/ProvisionDeviceRequest'
       responses:
         '201':
-          description: Device registered
+          description: Device provisioned
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Device'
+                $ref: '#/components/schemas/DeviceProvisioningResponse'
+        '409':
+          description: Device identity already exists
   /v1/vpn/config:
     post:
       summary: Allocate a server and issue a device-specific WireGuard configuration
       security:
-        - bearerAuth: []
+        - deviceToken: []
       requestBody:
         required: true
         content:
@@ -71,13 +71,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/VpnConfigResponse'
         '403':
-          description: Plan does not permit the requested server
+          description: Device entitlement does not permit the requested server
+        '409':
+          description: Device provisioning is incomplete
 components:
   securitySchemes:
-    bearerAuth:
+    deviceToken:
       type: http
       scheme: bearer
-      bearerFormat: JWT
+      bearerFormat: device-token
   schemas:
     HealthResponse:
       type: object
@@ -100,13 +102,28 @@ components:
         premium: { type: boolean }
         healthy: { type: boolean }
         loadPercent: { type: integer, minimum: 0, maximum: 100 }
-    RegisterDeviceRequest:
+        latencyMs: { type: integer, minimum: 0, nullable: true }
+    ProvisionDeviceRequest:
       type: object
       required: [deviceId, publicKey]
       properties:
         deviceId: { type: string, minLength: 8, maxLength: 128 }
-        publicKey: { type: string, minLength: 32, maxLength: 64 }
+        publicKey: { type: string, minLength: 43, maxLength: 44 }
         deviceName: { type: string, maxLength: 100 }
+        platform: { type: string, enum: [android] }
+        appVersion: { type: string, maxLength: 32 }
+    DeviceProvisioningResponse:
+      type: object
+      required: [deviceToken, device]
+      properties:
+        deviceToken:
+          type: string
+          description: Opaque device-scoped credential. Store securely on the device and never log it.
+        device:
+          $ref: '#/components/schemas/Device'
+        expiresAt:
+          type: string
+          format: date-time
     Device:
       type: object
       required: [id, deviceId, publicKey]
