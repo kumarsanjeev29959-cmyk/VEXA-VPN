@@ -5,10 +5,12 @@ on:
     branches: [ main ]
     paths:
       - 'backend/**'
+      - 'infra/wireguard/**'
       - '.github/workflows/backend.yml'
   pull_request:
     paths:
       - 'backend/**'
+      - 'infra/wireguard/**'
       - '.github/workflows/backend.yml'
 
 permissions:
@@ -26,3 +28,6 @@ jobs:
         with:
           node-version: 20
       - run: npm test
+      - run: node --check src/server.js
+      - run: node --check src/store.js
+      - run: node --check ../infra/wireguard/vexa-node-agent.js
