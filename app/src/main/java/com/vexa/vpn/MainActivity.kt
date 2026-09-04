@@ -1,5 +1,7 @@
 package com.vexa.vpn
 
+import android.app.Activity
+import android.content.Intent
 import android.net.VpnService
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -35,10 +37,13 @@ fun VexaApp() {
     val context = androidx.compose.ui.platform.LocalContext.current
     val activity = context as? MainActivity
     val vpnController = remember { VpnController(context) }
-    var connected by remember { mutableStateOf(vpnController.state().name == "UP") }
+    var vpnState by remember {
+        mutableStateOf<VpnUiState>(
+            if (vpnController.state().name == "UP") VpnUiState.Connected else VpnUiState.Disconnected
+        )
+    }
     var configText by remember { mutableStateOf("") }
     var showConfig by remember { mutableStateOf(false) }
-    var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
 
     fun connectNow() {
@@ -46,26 +51,36 @@ fun VexaApp() {
             showConfig = true
             return
         }
-        if (vpnController.isVpnAuthorizationRequired(context)) return
-        busy = true
+        if (vpnController.isVpnAuthorizationRequired(context)) {
+            val intent = VpnService.prepare(context)
+            if (intent != null) return
+        }
+
+        vpnState = VpnUiState.Connecting
         activity?.lifecycleScope?.launch {
             val result = runCatching {
                 withContext(Dispatchers.IO) { vpnController.connect(configText) }
             }
-            busy = false
-            result.onSuccess { connected = it.name == "UP" }
-                .onFailure { message = vpnController.friendlyError(it) }
+            result.onSuccess {
+                vpnState = if (it.name == "UP") VpnUiState.Connected else VpnUiState.Disconnected
+            }.onFailure {
+                vpnState = VpnUiState.Error(vpnController.friendlyError(it))
+                message = vpnController.friendlyError(it)
+            }
         }
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode == RESULT_OK) connectNow()
+        if (result.resultCode == Activity.RESULT_OK) connectNow()
         else message = "VPN permission is required to protect your connection."
     }
 
     MaterialTheme(colorScheme = darkColorScheme()) {
+        val connected = vpnState is VpnUiState.Connected
+        val busy = vpnState is VpnUiState.Connecting || vpnState is VpnUiState.Disconnecting
+
         Column(
             modifier = Modifier.fillMaxSize().background(Color(0xFF090B12)).padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -81,12 +96,18 @@ fun VexaApp() {
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        when {
-                            busy -> "CONNECTING"
-                            connected -> "PROTECTED"
-                            else -> "NOT CONNECTED"
+                        when (vpnState) {
+                            VpnUiState.Connecting -> "CONNECTING"
+                            VpnUiState.Connected -> "PROTECTED"
+                            VpnUiState.Disconnecting -> "DISCONNECTING"
+                            is VpnUiState.Error -> "ERROR"
+                            VpnUiState.Disconnected -> "NOT CONNECTED"
                         },
-                        color = if (connected) Color(0xFF55E6A5) else Color(0xFF8B93A7),
+                        color = when (vpnState) {
+                            VpnUiState.Connected -> Color(0xFF55E6A5)
+                            is VpnUiState.Error -> Color(0xFFFF7B7B)
+                            else -> Color(0xFF8B93A7)
+                        },
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -95,23 +116,27 @@ fun VexaApp() {
                         enabled = !busy,
                         onClick = {
                             if (connected) {
-                                busy = true
+                                vpnState = VpnUiState.Disconnecting
                                 activity?.lifecycleScope?.launch {
                                     val result = runCatching {
                                         withContext(Dispatchers.IO) { vpnController.disconnect() }
                                     }
-                                    busy = false
-                                    result.onSuccess { connected = false }
-                                        .onFailure { message = vpnController.friendlyError(it) }
+                                    result.onSuccess { vpnState = VpnUiState.Disconnected }
+                                        .onFailure {
+                                            vpnState = VpnUiState.Error(vpnController.friendlyError(it))
+                                            message = vpnController.friendlyError(it)
+                                        }
                                 }
                             } else if (vpnController.isVpnAuthorizationRequired(context)) {
-                                val intent = VpnService.prepare(context)
-                                if (intent != null) permissionLauncher.launch(intent)
+                                val intent: Intent? = VpnService.prepare(context)
+                                if (intent != null) permissionLauncher.launch(intent) else connectNow()
                             } else connectNow()
                         },
                         modifier = Modifier.size(130.dp),
                         shape = CircleShape,
-                        colors = ButtonDefaults.buttonColors(containerColor = if (connected) Color(0xFF173D31) else Color(0xFF5B5FEF))
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (connected) Color(0xFF173D31) else Color(0xFF5B5FEF)
+                        )
                     ) { Text(if (connected) "OFF" else "CONNECT", fontWeight = FontWeight.Bold) }
                 }
             }
