@@ -1,6 +1,7 @@
 package com.vexa.vpn
 
 import android.content.Context
+import android.net.VpnService
 import com.wireguard.android.backend.BackendException
 import com.wireguard.android.backend.GoBackend
 import com.wireguard.android.backend.Tunnel
@@ -29,11 +30,15 @@ class VpnController(context: Context) {
 
     fun state(): Tunnel.State = backend.getState(tunnel)
 
-    fun isVpnAuthorizationRequired(context: Context): Boolean =
-        android.net.VpnService.prepare(context) != null
+    fun isVpnAuthorized(context: Context): Boolean = VpnService.prepare(context) == null
 
     fun friendlyError(error: Throwable): String = when (error) {
-        is BackendException -> error.reason.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
-        else -> error.message ?: "Unable to start VPN"
+        is BackendException -> when (error.reason) {
+            BackendException.Reason.VPN_NOT_AUTHORIZED -> "VPN permission is required."
+            BackendException.Reason.TUN_CREATION_ERROR -> "VEXA could not create the VPN tunnel."
+            else -> "VEXA could not start the VPN connection."
+        }
+        is IllegalArgumentException -> "The VPN server configuration is invalid."
+        else -> "VEXA could not start the VPN connection."
     }
 }
