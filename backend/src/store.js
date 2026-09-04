@@ -30,7 +30,13 @@ function saveState(state) {
     devices: [...state.devices.entries()],
     allocations: [...state.allocations.entries()],
   });
-  fs.writeFileSync(tmp, payload, { encoding: 'utf8', mode: 0o600 });
+  const fd = fs.openSync(tmp, 'w', 0o600);
+  try {
+    fs.writeFileSync(fd, payload, { encoding: 'utf8' });
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
   fs.renameSync(tmp, filePath);
 }
 
