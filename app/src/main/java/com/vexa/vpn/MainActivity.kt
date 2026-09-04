@@ -36,7 +36,6 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun VexaApp(vpnViewModel: VpnViewModel) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val activity = context as? MainActivity
     val vpnState by vpnViewModel.state.collectAsStateWithLifecycle()
     var configText by rememberSaveable { mutableStateOf("") }
     var showConfig by rememberSaveable { mutableStateOf(false) }
@@ -97,10 +96,9 @@ fun VexaApp(vpnViewModel: VpnViewModel) {
                         onClick = {
                             if (connected) {
                                 vpnViewModel.disconnect()
-                            } else if (VpnService.prepare(context) != null) {
-                                permissionLauncher.launch(VpnService.prepare(context))
                             } else {
-                                connectNow()
+                                val intent: Intent? = VpnService.prepare(context)
+                                if (intent != null) permissionLauncher.launch(intent) else connectNow()
                             }
                         },
                         modifier = Modifier.size(130.dp),
