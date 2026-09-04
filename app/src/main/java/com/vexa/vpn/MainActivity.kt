@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -20,56 +21,33 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 class MainActivity : ComponentActivity() {
+    private val vpnViewModel: VpnViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { VexaApp() }
+        vpnViewModel.initialize(this)
+        setContent { VexaApp(vpnViewModel) }
     }
 }
 
 @Composable
-fun VexaApp() {
+fun VexaApp(vpnViewModel: VpnViewModel) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val activity = context as? MainActivity
-    val vpnController = remember { VpnController(context) }
-    var vpnState by remember {
-        mutableStateOf<VpnUiState>(
-            runCatching { vpnController.state() }
-                .fold(
-                    onSuccess = { if (it.name == "UP") VpnUiState.Connected else VpnUiState.Disconnected },
-                    onFailure = { VpnUiState.Disconnected }
-                )
-        )
-    }
-    var configText by remember { mutableStateOf("") }
-    var showConfig by remember { mutableStateOf(false) }
-    var message by remember { mutableStateOf<String?>(null) }
+    val vpnState by vpnViewModel.state.collectAsStateWithLifecycle()
+    var configText by rememberSaveable { mutableStateOf("") }
+    var showConfig by rememberSaveable { mutableStateOf(false) }
+    var message by rememberSaveable { mutableStateOf<String?>(null) }
 
     fun connectNow() {
         if (configText.isBlank()) {
             showConfig = true
             return
         }
-        if (vpnController.isVpnAuthorizationRequired(context)) return
-
-        vpnState = VpnUiState.Connecting
-        activity?.lifecycleScope?.launch {
-            val result = runCatching {
-                withContext(Dispatchers.IO) { vpnController.connect(configText) }
-            }
-            result.onSuccess {
-                vpnState = if (it.name == "UP") VpnUiState.Connected else VpnUiState.Disconnected
-            }.onFailure {
-                val error = vpnController.friendlyError(it)
-                vpnState = VpnUiState.Error(error)
-                message = error
-            }
-        }
+        vpnViewModel.connect(configText)
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -118,22 +96,12 @@ fun VexaApp() {
                         enabled = !busy,
                         onClick = {
                             if (connected) {
-                                vpnState = VpnUiState.Disconnecting
-                                activity?.lifecycleScope?.launch {
-                                    val result = runCatching {
-                                        withContext(Dispatchers.IO) { vpnController.disconnect() }
-                                    }
-                                    result.onSuccess { vpnState = VpnUiState.Disconnected }
-                                        .onFailure {
-                                            val error = vpnController.friendlyError(it)
-                                            vpnState = VpnUiState.Error(error)
-                                            message = error
-                                        }
-                                }
-                            } else if (vpnController.isVpnAuthorizationRequired(context)) {
-                                val intent: Intent? = VpnService.prepare(context)
-                                if (intent != null) permissionLauncher.launch(intent) else connectNow()
-                            } else connectNow()
+                                vpnViewModel.disconnect()
+                            } else if (VpnService.prepare(context) != null) {
+                                permissionLauncher.launch(VpnService.prepare(context))
+                            } else {
+                                connectNow()
+                            }
                         },
                         modifier = Modifier.size(130.dp),
                         shape = CircleShape,
@@ -162,8 +130,10 @@ fun VexaApp() {
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
-            OutlinedButton(onClick = { showConfig = true }) { Text("VPN SERVER CONFIG") }
+            if (BuildConfig.DEBUG) {
+                Spacer(Modifier.height(12.dp))
+                OutlinedButton(onClick = { showConfig = true }) { Text("DEV SERVER CONFIG") }
+            }
             Spacer(Modifier.weight(1f))
             Text("VEXA VPN • v1.0.0", color = Color(0xFF555D70), fontSize = 12.sp)
             Spacer(Modifier.height(12.dp))
@@ -172,10 +142,10 @@ fun VexaApp() {
         if (showConfig) {
             AlertDialog(
                 onDismissRequest = { showConfig = false },
-                title = { Text("WireGuard server config") },
+                title = { Text("WireGuard development config") },
                 text = {
                     Column {
-                        Text("Paste a valid WireGuard client configuration. It stays in memory and is not uploaded by this screen.", fontSize = 13.sp)
+                        Text("Development only. Paste a valid WireGuard client configuration. It stays in memory and is not uploaded by this screen.", fontSize = 13.sp)
                         Spacer(Modifier.height(12.dp))
                         OutlinedTextField(
                             value = configText,
@@ -199,6 +169,10 @@ fun VexaApp() {
                 text = { Text(text) },
                 confirmButton = { TextButton(onClick = { message = null }) { Text("OK") } }
             )
+        }
+
+        if (vpnState is VpnUiState.Error) {
+            LaunchedEffect(vpnState) { message = (vpnState as VpnUiState.Error).message }
         }
     }
 }
