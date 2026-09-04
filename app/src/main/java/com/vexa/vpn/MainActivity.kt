@@ -39,7 +39,11 @@ fun VexaApp() {
     val vpnController = remember { VpnController(context) }
     var vpnState by remember {
         mutableStateOf<VpnUiState>(
-            if (vpnController.state().name == "UP") VpnUiState.Connected else VpnUiState.Disconnected
+            runCatching { vpnController.state() }
+                .fold(
+                    onSuccess = { if (it.name == "UP") VpnUiState.Connected else VpnUiState.Disconnected },
+                    onFailure = { VpnUiState.Disconnected }
+                )
         )
     }
     var configText by remember { mutableStateOf("") }
@@ -51,10 +55,7 @@ fun VexaApp() {
             showConfig = true
             return
         }
-        if (vpnController.isVpnAuthorizationRequired(context)) {
-            val intent = VpnService.prepare(context)
-            if (intent != null) return
-        }
+        if (vpnController.isVpnAuthorizationRequired(context)) return
 
         vpnState = VpnUiState.Connecting
         activity?.lifecycleScope?.launch {
@@ -64,8 +65,9 @@ fun VexaApp() {
             result.onSuccess {
                 vpnState = if (it.name == "UP") VpnUiState.Connected else VpnUiState.Disconnected
             }.onFailure {
-                vpnState = VpnUiState.Error(vpnController.friendlyError(it))
-                message = vpnController.friendlyError(it)
+                val error = vpnController.friendlyError(it)
+                vpnState = VpnUiState.Error(error)
+                message = error
             }
         }
     }
@@ -123,8 +125,9 @@ fun VexaApp() {
                                     }
                                     result.onSuccess { vpnState = VpnUiState.Disconnected }
                                         .onFailure {
-                                            vpnState = VpnUiState.Error(vpnController.friendlyError(it))
-                                            message = vpnController.friendlyError(it)
+                                            val error = vpnController.friendlyError(it)
+                                            vpnState = VpnUiState.Error(error)
+                                            message = error
                                         }
                                 }
                             } else if (vpnController.isVpnAuthorizationRequired(context)) {
