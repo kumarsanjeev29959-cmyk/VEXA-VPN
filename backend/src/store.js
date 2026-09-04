@@ -1,11 +1,14 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const STORE_PATH = process.env.VEXA_STORE_PATH || path.join(process.cwd(), 'data', 'state.json');
+function storePath() {
+  return process.env.VEXA_STORE_PATH || path.join(process.cwd(), 'data', 'state.json');
+}
 
 function loadState() {
+  const filePath = storePath();
   try {
-    const parsed = JSON.parse(fs.readFileSync(STORE_PATH, 'utf8'));
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
     return {
       servers: new Map(parsed.servers || []),
       devices: new Map(parsed.devices || []),
@@ -18,16 +21,17 @@ function loadState() {
 }
 
 function saveState(state) {
-  const dir = path.dirname(STORE_PATH);
+  const filePath = storePath();
+  const dir = path.dirname(filePath);
   fs.mkdirSync(dir, { recursive: true });
-  const tmp = `${STORE_PATH}.tmp`;
+  const tmp = `${filePath}.tmp`;
   const payload = JSON.stringify({
     servers: [...state.servers.entries()],
     devices: [...state.devices.entries()],
     allocations: [...state.allocations.entries()],
   });
   fs.writeFileSync(tmp, payload, { encoding: 'utf8', mode: 0o600 });
-  fs.renameSync(tmp, STORE_PATH);
+  fs.renameSync(tmp, filePath);
 }
 
-module.exports = { loadState, saveState, STORE_PATH };
+module.exports = { loadState, saveState, storePath };
