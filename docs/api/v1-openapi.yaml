@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: VEXA VPN API
   version: 1.0.0
-  description: Device-based backend contract for server discovery, device provisioning and WireGuard configuration delivery. End users do not log in or register with email/password.
+  description: Device-based backend contract for server discovery and WireGuard peer provisioning. End users do not log in or register with email/password.
 servers:
   - url: https://api.example.com
 paths:
@@ -34,6 +34,8 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/VpnServer'
+        '401':
+          description: Invalid or expired device token
   /v1/devices:
     post:
       summary: Provision a device without an end-user account
@@ -50,11 +52,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeviceProvisioningResponse'
-        '409':
-          description: Device identity already exists
+        '400':
+          description: Invalid device identity
   /v1/vpn/config:
     post:
-      summary: Allocate a server and issue a device-specific WireGuard configuration
+      summary: Allocate a server and issue device-specific WireGuard peer information
       security:
         - deviceToken: []
       requestBody:
@@ -65,39 +67,60 @@ paths:
               $ref: '#/components/schemas/VpnConfigRequest'
       responses:
         '200':
-          description: WireGuard configuration issued
+          description: WireGuard peer information issued; the client private key is never sent to the backend
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/VpnConfigResponse'
+        '401':
+          description: Invalid or expired device token
         '403':
-          description: Device entitlement does not permit the requested server
-        '409':
-          description: Device provisioning is incomplete
+          description: Device identity does not match the provisioned identity
+        '503':
+          description: No healthy VPN server is available
+  /v1/node/jobs:
+    get:
+      summary: Fetch pending peer jobs for a VPN node agent
+      security:
+        - nodeToken: []
+      responses:
+        '200':
+          description: Pending peer jobs
+  /v1/node/jobs/ack:
+    post:
+      summary: Acknowledge a VPN node peer job
+      security:
+        - nodeToken: []
+      responses:
+        '200':
+          description: Job acknowledgement accepted
 components:
   securitySchemes:
     deviceToken:
       type: http
       scheme: bearer
       bearerFormat: device-token
+    nodeToken:
+      type: apiKey
+      in: header
+      name: X-VEXA-Node-Token
   schemas:
     HealthResponse:
       type: object
-      required: [status]
+      required: [status, service]
       properties:
-        status:
-          type: string
-          example: ok
+        status: { type: string, example: ok }
+        service: { type: string, example: vexa-control-plane }
     VpnServer:
       type: object
-      required: [id, name, countryCode, city, hostname, port, protocol, premium, healthy]
+      required: [id, name, countryCode, city, hostname, port, protocol, premium, healthy, loadPercent]
       properties:
         id: { type: string, example: in-patna-01 }
         name: { type: string, example: India - Patna 01 }
         countryCode: { type: string, example: IN }
         city: { type: string, example: Patna }
         hostname: { type: string, example: in-patna-01.vexa.example }
-        port: { type: integer, example: 51820 }
+        port: { type: integer, minimum: 1, maximum: 65535, example: 51820 }
         protocol: { type: string, enum: [wireguard] }
         premium: { type: boolean }
         healthy: { type: boolean }
@@ -114,24 +137,13 @@ components:
         appVersion: { type: string, maxLength: 32 }
     DeviceProvisioningResponse:
       type: object
-      required: [deviceToken, device]
+      required: [deviceToken, deviceId, expiresAt]
       properties:
         deviceToken:
           type: string
-          description: Opaque device-scoped credential. Store securely on the device and never log it.
-        device:
-          $ref: '#/components/schemas/Device'
-        expiresAt:
-          type: string
-          format: date-time
-    Device:
-      type: object
-      required: [id, deviceId, publicKey]
-      properties:
-        id: { type: string }
+          description: Opaque device-scoped credential. Store only on the device and never log it.
         deviceId: { type: string }
-        publicKey: { type: string }
-        deviceName: { type: string }
+        expiresAt: { type: string, format: date-time }
     VpnConfigRequest:
       type: object
       required: [deviceId]
@@ -139,15 +151,19 @@ components:
         deviceId: { type: string }
         serverId: { type: string, nullable: true }
         fastest: { type: boolean, default: true }
+    VpnPeer:
+      type: object
+      required: [serverPublicKey, address, dns, allowedIPs, persistentKeepalive]
+      properties:
+        serverPublicKey: { type: string, minLength: 43, maxLength: 44 }
+        address: { type: string, example: 10.64.0.2/32 }
+        dns: { type: string, example: 1.1.1.1 }
+        allowedIPs: { type: string, example: '0.0.0.0/0, ::/0' }
+        persistentKeepalive: { type: integer, minimum: 0, maximum: 65535, example: 25 }
     VpnConfigResponse:
       type: object
-      required: [server, config]
+      required: [server, peer, expiresAt]
       properties:
-        server:
-          $ref: '#/components/schemas/VpnServer'
-        config:
-          type: string
-          description: Complete WireGuard client configuration. Never log or persist this response in backend logs.
-        expiresAt:
-          type: string
-          format: date-time
+        server: { $ref: '#/components/schemas/VpnServer' }
+        peer: { $ref: '#/components/schemas/VpnPeer' }
+        expiresAt: { type: string, format: date-time }
