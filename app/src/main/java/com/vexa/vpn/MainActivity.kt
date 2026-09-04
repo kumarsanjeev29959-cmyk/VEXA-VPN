@@ -1,8 +1,12 @@
 package com.vexa.vpn
 
+import android.content.Intent
+import android.net.VpnService
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -15,6 +19,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -25,8 +33,39 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun VexaApp() {
-    var connected by remember { mutableStateOf(false) }
-    var server by remember { mutableStateOf("Auto • Fastest") }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val activity = context as? MainActivity
+    val vpnController = remember { VpnController(context) }
+    var connected by remember { mutableStateOf(vpnController.state().name == "UP") }
+    var configText by remember { mutableStateOf("") }
+    var showConfig by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+
+    fun connectNow() {
+        if (configText.isBlank()) {
+            showConfig = true
+            return
+        }
+        if (vpnController.isVpnAuthorizationRequired(context)) return
+        busy = true
+        activity?.lifecycleScope?.launch {
+            val result = runCatching {
+                withContext(Dispatchers.IO) { vpnController.connect(configText) }
+            }
+            busy = false
+            result.onSuccess { connected = it.name == "UP" }
+                .onFailure { message = vpnController.friendlyError(it) }
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == ComponentActivity.RESULT_OK) connectNow()
+        else message = "VPN permission is required to protect your connection."
+    }
+
     MaterialTheme(colorScheme = darkColorScheme()) {
         Column(
             modifier = Modifier.fillMaxSize().background(Color(0xFF090B12)).padding(24.dp),
@@ -42,33 +81,96 @@ fun VexaApp() {
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(if (connected) "PROTECTED" else "NOT CONNECTED", color = if (connected) Color(0xFF55E6A5) else Color(0xFF8B93A7), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        when {
+                            busy -> "CONNECTING"
+                            connected -> "PROTECTED"
+                            else -> "NOT CONNECTED"
+                        },
+                        color = if (connected) Color(0xFF55E6A5) else Color(0xFF8B93A7),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                     Spacer(Modifier.height(8.dp))
                     Button(
-                        onClick = { connected = !connected },
+                        enabled = !busy,
+                        onClick = {
+                            if (connected) {
+                                busy = true
+                                activity?.lifecycleScope?.launch {
+                                    val result = runCatching {
+                                        withContext(Dispatchers.IO) { vpnController.disconnect() }
+                                    }
+                                    busy = false
+                                    result.onSuccess { connected = false }
+                                        .onFailure { message = vpnController.friendlyError(it) }
+                                }
+                            } else if (vpnController.isVpnAuthorizationRequired(context)) {
+                                permissionLauncher.launch(VpnService.prepare(context))
+                            } else connectNow()
+                        },
                         modifier = Modifier.size(130.dp),
                         shape = CircleShape,
                         colors = ButtonDefaults.buttonColors(containerColor = if (connected) Color(0xFF173D31) else Color(0xFF5B5FEF))
-                    ) { Text(if (connected) "ON" else "CONNECT", fontWeight = FontWeight.Bold) }
+                    ) { Text(if (connected) "OFF" else "CONNECT", fontWeight = FontWeight.Bold) }
                 }
             }
 
             Spacer(Modifier.height(36.dp))
-            Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF111622)), modifier = Modifier.fillMaxWidth()) {
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF111622)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Column(Modifier.padding(20.dp)) {
                     Text("SERVER", color = Color(0xFF8B93A7), fontSize = 11.sp)
                     Spacer(Modifier.height(6.dp))
-                    Text(server, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Auto • Fastest", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(16.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Ping  —  24 ms", color = Color(0xFFB7BECE), fontSize = 13.sp)
-                        Text("Secure", color = Color(0xFF55E6A5), fontSize = 13.sp)
+                        Text("WireGuard", color = Color(0xFFB7BECE), fontSize = 13.sp)
+                        Text(if (connected) "Secure" else "Ready", color = Color(0xFF55E6A5), fontSize = 13.sp)
                     }
                 }
             }
+
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(onClick = { showConfig = true }) { Text("VPN SERVER CONFIG") }
             Spacer(Modifier.weight(1f))
             Text("VEXA VPN • v1.0.0", color = Color(0xFF555D70), fontSize = 12.sp)
             Spacer(Modifier.height(12.dp))
+        }
+
+        if (showConfig) {
+            AlertDialog(
+                onDismissRequest = { showConfig = false },
+                title = { Text("WireGuard server config") },
+                text = {
+                    Column {
+                        Text("Paste a valid WireGuard client configuration. It stays in memory and is not uploaded by this screen.", fontSize = 13.sp)
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = configText,
+                            onValueChange = { configText = it },
+                            modifier = Modifier.fillMaxWidth().height(220.dp),
+                            placeholder = { Text("[Interface]\\nPrivateKey = ...\\nAddress = ...\\n[Peer]\\n...") }
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showConfig = false; connectNow() }) { Text("CONNECT") }
+                },
+                dismissButton = { TextButton(onClick = { showConfig = false }) { Text("CANCEL") } }
+            )
+        }
+
+        message?.let { text ->
+            AlertDialog(
+                onDismissRequest = { message = null },
+                title = { Text("VEXA VPN") },
+                text = { Text(text) },
+                confirmButton = { TextButton(onClick = { message = null }) { Text("OK") } }
+            )
         }
     }
 }
