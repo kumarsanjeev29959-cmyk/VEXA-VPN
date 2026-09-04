@@ -10,6 +10,12 @@ on:
 permissions:
   contents: read
 
+env:
+  VEXA_KEYSTORE_PATH: ${{ github.workspace }}/.signing/vexa-release.jks
+  VEXA_KEY_ALIAS: ${{ secrets.VEXA_KEY_ALIAS }}
+  VEXA_KEYSTORE_PASSWORD: ${{ secrets.VEXA_KEYSTORE_PASSWORD }}
+  VEXA_KEY_PASSWORD: ${{ secrets.VEXA_KEY_PASSWORD }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -28,6 +34,15 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Prepare release signing key
+        if: ${{ secrets.VEXA_KEYSTORE_B64 != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .signing
+          printf '%s' '${{ secrets.VEXA_KEYSTORE_B64 }}' | base64 --decode > "$VEXA_KEYSTORE_PATH"
+          chmod 600 "$VEXA_KEYSTORE_PATH"
+
       - name: Run unit tests
         run: gradle --no-daemon test
 
@@ -37,8 +52,22 @@ jobs:
       - name: Build release APK
         run: gradle --no-daemon assembleRelease
 
+      - name: Verify release is signed
+        if: ${{ secrets.VEXA_KEYSTORE_B64 != '' }}
+        run: |
+          set -euo pipefail
+          test -f app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose app/build/outputs/apk/release/app-release.apk
+
       - name: Generate release checksum
-        run: sha256sum app/build/outputs/apk/release/app-release-unsigned.apk > app/build/outputs/apk/release/app-release-unsigned.apk.sha256
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+            sha256sum app/build/outputs/apk/release/app-release.apk > app/build/outputs/apk/release/app-release.apk.sha256
+          else
+            sha256sum app/build/outputs/apk/release/app-release-unsigned.apk > app/build/outputs/apk/release/app-release-unsigned.apk.sha256
+          fi
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
