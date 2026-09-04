@@ -31,6 +31,11 @@ class MainActivity : ComponentActivity() {
         vpnViewModel.initialize(this)
         setContent { VexaApp(vpnViewModel) }
     }
+
+    override fun onResume() {
+        super.onResume()
+        vpnViewModel.refreshState()
+    }
 }
 
 @Composable
@@ -94,9 +99,8 @@ fun VexaApp(vpnViewModel: VpnViewModel) {
                     Button(
                         enabled = !busy,
                         onClick = {
-                            if (connected) {
-                                vpnViewModel.disconnect()
-                            } else {
+                            if (connected) vpnViewModel.disconnect()
+                            else {
                                 val intent: Intent? = VpnService.prepare(context)
                                 if (intent != null) permissionLauncher.launch(intent) else connectNow()
                             }
