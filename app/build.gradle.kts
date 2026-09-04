@@ -23,7 +23,8 @@ android {
             val storePassword = providers.gradleProperty("VEXA_KEYSTORE_PASSWORD").orNull ?: System.getenv("VEXA_KEYSTORE_PASSWORD")
             val keyAlias = providers.gradleProperty("VEXA_KEY_ALIAS").orNull ?: System.getenv("VEXA_KEY_ALIAS")
             val keyPassword = providers.gradleProperty("VEXA_KEY_PASSWORD").orNull ?: System.getenv("VEXA_KEY_PASSWORD")
-            if (!keystorePath.isNullOrBlank() && !storePassword.isNullOrBlank() && !keyAlias.isNullOrBlank() && !keyPassword.isNullOrBlank()) {
+            if (!keystorePath.isNullOrBlank() && file(keystorePath).exists() &&
+                !storePassword.isNullOrBlank() && !keyAlias.isNullOrBlank() && !keyPassword.isNullOrBlank()) {
                 storeFile = file(keystorePath)
                 this.storePassword = storePassword
                 this.keyAlias = keyAlias
@@ -34,7 +35,12 @@ android {
 
     buildTypes {
         release {
-            val hasReleaseSigning = providers.gradleProperty("VEXA_KEYSTORE_PATH").isPresent || !System.getenv("VEXA_KEYSTORE_PATH").isNullOrBlank()
+            val keystorePath = providers.gradleProperty("VEXA_KEYSTORE_PATH").orNull ?: System.getenv("VEXA_KEYSTORE_PATH")
+            val storePassword = providers.gradleProperty("VEXA_KEYSTORE_PASSWORD").orNull ?: System.getenv("VEXA_KEYSTORE_PASSWORD")
+            val keyAlias = providers.gradleProperty("VEXA_KEY_ALIAS").orNull ?: System.getenv("VEXA_KEY_ALIAS")
+            val keyPassword = providers.gradleProperty("VEXA_KEY_PASSWORD").orNull ?: System.getenv("VEXA_KEY_PASSWORD")
+            val hasReleaseSigning = !keystorePath.isNullOrBlank() && file(keystorePath).exists() &&
+                !storePassword.isNullOrBlank() && !keyAlias.isNullOrBlank() && !keyPassword.isNullOrBlank()
             if (hasReleaseSigning) signingConfig = signingConfigs.getByName("release")
         }
     }
