@@ -3,6 +3,7 @@ package com.vexa.vpn
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.wireguard.android.backend.Tunnel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,13 +18,17 @@ class VpnViewModel : ViewModel() {
 
     fun initialize(context: Context) {
         if (controller != null) return
-        val created = VpnController(context.applicationContext)
-        controller = created
-        _state.value = runCatching { created.state() }
-            .fold(
-                onSuccess = { if (it.name == "UP") VpnUiState.Connected else VpnUiState.Disconnected },
-                onFailure = { VpnUiState.Disconnected }
-            )
+        controller = VpnController(context.applicationContext)
+        refreshState()
+    }
+
+    fun refreshState() {
+        val vpn = controller ?: return
+        _state.value = when (runCatching { vpn.state() }.getOrNull()) {
+            Tunnel.State.UP -> VpnUiState.Connected
+            Tunnel.State.TOGGLE -> VpnUiState.Connecting
+            else -> VpnUiState.Disconnected
+        }
     }
 
     fun connect(config: String) {
@@ -36,7 +41,7 @@ class VpnViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { vpn.connect(config) }
                 .onSuccess { state ->
-                    _state.value = if (state.name == "UP") VpnUiState.Connected else VpnUiState.Disconnected
+                    _state.value = if (state == Tunnel.State.UP) VpnUiState.Connected else VpnUiState.Disconnected
                 }
                 .onFailure { error -> _state.value = VpnUiState.Error(vpn.friendlyError(error)) }
         }
