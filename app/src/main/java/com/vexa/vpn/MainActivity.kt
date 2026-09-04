@@ -1,6 +1,5 @@
 package com.vexa.vpn
 
-import android.content.Intent
 import android.net.VpnService
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -62,7 +61,7 @@ fun VexaApp() {
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode == ComponentActivity.RESULT_OK) connectNow()
+        if (result.resultCode == RESULT_OK) connectNow()
         else message = "VPN permission is required to protect your connection."
     }
 
@@ -106,7 +105,8 @@ fun VexaApp() {
                                         .onFailure { message = vpnController.friendlyError(it) }
                                 }
                             } else if (vpnController.isVpnAuthorizationRequired(context)) {
-                                permissionLauncher.launch(VpnService.prepare(context))
+                                val intent = VpnService.prepare(context)
+                                if (intent != null) permissionLauncher.launch(intent)
                             } else connectNow()
                         },
                         modifier = Modifier.size(130.dp),
@@ -153,7 +153,7 @@ fun VexaApp() {
                             value = configText,
                             onValueChange = { configText = it },
                             modifier = Modifier.fillMaxWidth().height(220.dp),
-                            placeholder = { Text("[Interface]\\nPrivateKey = ...\\nAddress = ...\\n[Peer]\\n...") }
+                            placeholder = { Text("[Interface]\nPrivateKey = ...\nAddress = ...\n[Peer]\n...") }
                         )
                     }
                 },
