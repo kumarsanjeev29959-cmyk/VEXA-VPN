@@ -23,6 +23,11 @@ class VpnViewModel : ViewModel() {
         val appContext = context.applicationContext
         controller = VpnController(appContext)
         identity = DeviceIdentity(appContext)
+        provisioning = if (BuildConfig.VEXA_API_BASE_URL.isBlank()) {
+            UnconfiguredProvisioningRepository()
+        } else {
+            HttpVpnProvisioningRepository(appContext, BuildConfig.VEXA_API_BASE_URL)
+        }
         refreshState()
     }
 
