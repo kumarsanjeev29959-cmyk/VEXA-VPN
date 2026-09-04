@@ -1,0 +1,24 @@
+# Android / Gradle
+.gradle/
+**/build/
+local.properties
+
+# Local release signing material
+*.jks
+*.keystore
+*.b64
+.signing/
+
+# Local environment / secrets
+.env
+.env.*
+!.env.example
+keystore.properties
+
+# IDE
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
