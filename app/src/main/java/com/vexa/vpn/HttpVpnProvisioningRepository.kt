@@ -29,7 +29,7 @@ class HttpVpnProvisioningRepository(context: Context, private val baseUrl: Strin
  override suspend fun provisionConfig(deviceToken: String, request: ProvisioningRequest): Result<VpnConfigResponse> = runCatching {
   val body = JSONObject().put("deviceId", request.deviceId).put("publicKey", request.publicKey).put("fastest", request.fastest); request.serverId?.let { body.put("serverId", it) }
   val json = requestWithTokenRetry(deviceToken) { request("POST", "/v1/vpn/config", it, body) }; val p = json.getJSONObject("peer")
-  VpnConfigResponse(server(json.getJSONObject("server").let(::server)), peer = VpnPeerConfig(p.getString("serverPublicKey"), p.getString("address"), p.getString("dns"), p.getString("allowedIPs"), p.optInt("persistentKeepalive", 25)), expiresAt = json.getString("expiresAt"))
+  VpnConfigResponse(server = json.getJSONObject("server").let(::server), peer = VpnPeerConfig(p.getString("serverPublicKey"), p.getString("address"), p.getString("dns"), p.getString("allowedIPs"), p.optInt("persistentKeepalive", 25)), expiresAt = json.getString("expiresAt"))
  }
  private suspend fun requestWithTokenRetry(token: String, call: (String) -> JSONObject): JSONObject {
   return try { call(token) } catch (error: ApiException) {
