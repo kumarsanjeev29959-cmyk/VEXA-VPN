@@ -34,10 +34,10 @@ jobs:
       - name: Prepare release signing key
         shell: bash
         env:
-          VEXA_KEYSTORE_B64: ${{ secrets.VEXA_KEYSTORE_B64 }}
-          VEXA_KEY_ALIAS: ${{ secrets.VEXA_KEY_ALIAS }}
-          VEXA_KEYSTORE_PASSWORD: ${{ secrets.VEXA_KEYSTORE_PASSWORD }}
-          VEXA_KEY_PASSWORD: ${{ secrets.VEXA_KEY_PASSWORD }}
+          VEXA_KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 }}
+          VEXA_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          VEXA_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          VEXA_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -euo pipefail
           if [ -z "${VEXA_KEYSTORE_B64:-}" ]; then
@@ -46,7 +46,7 @@ jobs:
           fi
 
           if [ -z "${VEXA_KEY_ALIAS:-}" ] || [ -z "${VEXA_KEYSTORE_PASSWORD:-}" ] || [ -z "${VEXA_KEY_PASSWORD:-}" ]; then
-            echo "VEXA_KEYSTORE_B64 exists, but one or more signing credentials are missing."
+            echo "KEYSTORE_BASE64 exists, but one or more signing credentials are missing."
             exit 1
           fi
 
@@ -68,9 +68,9 @@ jobs:
 
       - name: Build release APK
         env:
-          VEXA_KEY_ALIAS: ${{ secrets.VEXA_KEY_ALIAS }}
-          VEXA_KEYSTORE_PASSWORD: ${{ secrets.VEXA_KEYSTORE_PASSWORD }}
-          VEXA_KEY_PASSWORD: ${{ secrets.VEXA_KEY_PASSWORD }}
+          VEXA_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          VEXA_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          VEXA_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: gradle --no-daemon assembleRelease
 
       - name: Verify release signing
