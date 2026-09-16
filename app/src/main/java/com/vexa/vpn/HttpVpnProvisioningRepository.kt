@@ -92,7 +92,11 @@ class HttpVpnProvisioningRepository(context: Context, private val baseUrl: Strin
             clearToken()
             return null
         }
-        val token = decrypt(encrypted)
+        val token = runCatching { decrypt(encrypted) }.getOrElse {
+            // Older builds stored the token as plaintext. Never reuse that value; re-provision securely.
+            clearToken()
+            return null
+        }
         return DeviceProvisioningResponse(token, DeviceIdentity(appContext).deviceId, expiry)
     }
 
