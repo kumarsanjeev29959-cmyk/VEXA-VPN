@@ -6,16 +6,18 @@ object ServerSelector {
         val candidates = servers
             .asSequence()
             .filter { it.healthy }
-            .filter { it.latencyMs != null && it.latencyMs >= 0 }
             .sortedWith(
-                compareBy<VpnServer> { it.latencyMs!! }
+                compareBy<VpnServer> { it.latencyMs ?: Int.MAX_VALUE }
                     .thenBy { it.loadPercent.coerceIn(0, 100) }
                     .thenBy { it.id }
             )
             .toList()
 
         return candidates.firstOrNull()?.let {
-            ServerSelection(it, "Lowest healthy latency")
+            ServerSelection(
+                it,
+                if (it.latencyMs != null) "Lowest healthy latency" else "Healthy server with no latency measurement"
+            )
         }
     }
 }
