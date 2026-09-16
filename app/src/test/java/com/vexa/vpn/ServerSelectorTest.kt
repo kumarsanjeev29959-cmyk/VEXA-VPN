@@ -29,21 +29,23 @@ class ServerSelectorTest {
         val result = ServerSelector.selectFastest(
             listOf(server("slow", latencyMs = 120), server("fast", latencyMs = 25))
         )
-
         assertEquals("fast", result?.server?.id)
     }
 
     @Test
-    fun ignoresUnhealthyAndUnknownLatencyServers() {
+    fun fallsBackToHealthyServerWhenLatencyIsUnknown() {
         val result = ServerSelector.selectFastest(
-            listOf(
-                server("offline", healthy = false, latencyMs = 5),
-                server("unknown", latencyMs = null),
-                server("healthy", latencyMs = 80)
-            )
+            listOf(server("unknown", latencyMs = null), server("healthy", latencyMs = null))
         )
-
         assertEquals("healthy", result?.server?.id)
+    }
+
+    @Test
+    fun prefersMeasuredLatencyOverUnknownLatency() {
+        val result = ServerSelector.selectFastest(
+            listOf(server("unknown", latencyMs = null), server("measured", latencyMs = 500))
+        )
+        assertEquals("measured", result?.server?.id)
     }
 
     @Test
@@ -54,16 +56,11 @@ class ServerSelectorTest {
                 server("a", latencyMs = 30, loadPercent = 20)
             )
         )
-
         assertEquals("a", result?.server?.id)
     }
 
     @Test
-    fun returnsNullWhenNoHealthyMeasuredServerExists() {
-        assertNull(
-            ServerSelector.selectFastest(
-                listOf(server("offline", healthy = false, latencyMs = 10), server("unknown", latencyMs = null))
-            )
-        )
+    fun returnsNullWhenNoHealthyServerExists() {
+        assertNull(ServerSelector.selectFastest(listOf(server("offline", healthy = false, latencyMs = 10))))
     }
 }
