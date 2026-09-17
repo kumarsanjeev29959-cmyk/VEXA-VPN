@@ -8,6 +8,8 @@ test('accepts a valid WireGuard public key', () => {
 
 test('rejects malformed WireGuard public keys', () => {
   assert.equal(validatePublicKey('not-a-wireguard-key'), false);
+  assert.equal(validatePublicKey('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='), false);
+  assert.equal(validatePublicKey('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'), false);
 });
 
 test('accepts a valid server definition', () => {
