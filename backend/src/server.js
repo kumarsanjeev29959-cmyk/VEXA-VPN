@@ -2,6 +2,7 @@ const http = require('node:http');
 const crypto = require('node:crypto');
 const { loadState, saveState } = require('./store');
 const { validatePublicKey, validateServerInput } = require('./validation');
+const { allocateAddress } = require('./address-pool');
 
 const PORT = Number(process.env.PORT || 8080);
 const ADMIN_KEY = process.env.VEXA_ADMIN_KEY || '';
@@ -10,9 +11,6 @@ const DEVICE_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 const CONFIG_TTL_MS = 60 * 60 * 1000;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const RATE_LIMIT_MAX = 60;
-const CLIENT_NETWORK_PREFIX = '10.64.';
-const CLIENT_ADDRESS_MIN = 2;
-const CLIENT_ADDRESS_MAX = 254;
 const { servers, devices, allocations } = loadState();
 const rateBuckets = new Map();
 
@@ -59,22 +57,6 @@ function bootstrapServerFromEnv(){
   if(validationError) throw new Error(`Invalid VEXA server environment: ${validationError}`);
   servers.set(body.id,{id:body.id,name:process.env.VEXA_SERVER_NAME||'VEXA Node 1',countryCode:process.env.VEXA_SERVER_COUNTRY||'IN',city:process.env.VEXA_SERVER_CITY||'Mumbai',hostname:body.hostname,port:body.port,protocol:'wireguard',premium:false,healthy:true,loadPercent:0,latencyMs:Number(process.env.VEXA_SERVER_LATENCY_MS||50),publicKey:body.publicKey,dns:process.env.VEXA_SERVER_DNS||'1.1.1.1',clientNetwork:process.env.VEXA_CLIENT_NETWORK||'10.64.0.0/16'}); persist();
 }
-function allocateAddress(serverId,deviceId){
-  const key=`${serverId}:${deviceId}`;
-  if(allocations.has(key)) return allocations.get(key).address;
-  const used=new Set([...allocations.values()].filter(a=>a.serverId===serverId).map(a=>a.address));
-  for(let secondOctet=0;secondOctet<256;secondOctet++){
-    for(let host=CLIENT_ADDRESS_MIN;host<=CLIENT_ADDRESS_MAX;host++){
-      const address=`${CLIENT_NETWORK_PREFIX}${secondOctet}.${host}`;
-      if(!used.has(address)){
-        allocations.set(key,{serverId,deviceId,address,applied:false,updatedAt:new Date().toISOString()});
-        persist();
-        return address;
-      }
-    }
-  }
-  throw new Error('No client tunnel address is available.');
-}
 function publicServer(server){ const {publicKey,dns,clientNetwork,...safe}=server; return safe; }
 async function handler(req,res){
   if(!allowRate(req,res)) return;
@@ -94,7 +76,7 @@ async function handler(req,res){
       const server=body.serverId?servers.get(body.serverId):fastestServer();
       if(!server||!server.healthy)return json(res,503,{message:'No healthy VPN server is available.'});
       if(!server.publicKey)return json(res,503,{message:'VPN node public key is not configured.'});
-      const address=allocateAddress(server.id,device.deviceId);
+      const address=allocateAddress(server.id,device.deviceId,allocations,server.clientNetwork);
       return json(res,200,{server:publicServer(server),peer:{serverPublicKey:server.publicKey,address:`${address}/32`,dns:server.dns,allowedIPs:'0.0.0.0/0, ::/0',persistentKeepalive:25},expiresAt:new Date(Date.now()+CONFIG_TTL_MS).toISOString()});
     }catch(error){return json(res,400,{message:error.message});}
   }
