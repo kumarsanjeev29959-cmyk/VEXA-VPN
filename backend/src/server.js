@@ -1,7 +1,7 @@
 const http = require('node:http');
 const crypto = require('node:crypto');
 const { loadState, saveState } = require('./store');
-const { validatePublicKey, validateServerInput } = require('./validation');
+const { validatePublicKey, validateDeviceId, validateServerInput } = require('./validation');
 const { allocateAddress } = require('./address-pool');
 
 const PORT = Number(process.env.PORT || 8080);
@@ -63,7 +63,7 @@ async function handler(req,res){
   const url=new URL(req.url,`http://${req.headers.host||'localhost'}`);
   if(req.method==='GET'&&url.pathname==='/v1/health') return json(res,200,{status:'ok',service:'vexa-control-plane'});
   if(req.method==='POST'&&url.pathname==='/v1/devices'){
-    try{ const body=await readJson(req); if(!body.deviceId||!validatePublicKey(body.publicKey)) return json(res,400,{message:'deviceId and a valid WireGuard public key are required.'});
+    try{ const body=await readJson(req); if(!validateDeviceId(body.deviceId)||!validatePublicKey(body.publicKey)) return json(res,400,{message:'deviceId and a valid WireGuard public key are required.'});
       const existing=[...devices.values()].find(d=>d.deviceId===body.deviceId); if(existing && Date.parse(existing.expiresAt)>Date.now())return json(res,200,existing.response);
       const deviceToken=token(); const expiresAt=new Date(Date.now()+DEVICE_TOKEN_TTL_MS).toISOString(); const response={deviceToken,deviceId:body.deviceId,expiresAt};
       devices.set(deviceToken,{deviceId:body.deviceId,publicKey:body.publicKey,expiresAt,response}); persist(); return json(res,201,response);
