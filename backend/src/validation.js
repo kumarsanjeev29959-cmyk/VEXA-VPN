@@ -1,7 +1,13 @@
-const WIREGUARD_PUBLIC_KEY = /^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw48012468]=?$/;
+const WIREGUARD_PUBLIC_KEY = /^[A-Za-z0-9+/]{43}=$/;
 
 function validatePublicKey(value) {
-  return typeof value === 'string' && WIREGUARD_PUBLIC_KEY.test(value);
+  if (typeof value !== 'string' || !WIREGUARD_PUBLIC_KEY.test(value)) return false;
+  try {
+    const decoded = Buffer.from(value, 'base64');
+    return decoded.length === 32 && decoded.toString('base64') === value;
+  } catch {
+    return false;
+  }
 }
 
 function validateServerInput(body) {
