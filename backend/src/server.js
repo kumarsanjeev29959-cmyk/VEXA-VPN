@@ -10,6 +10,9 @@ const DEVICE_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 const CONFIG_TTL_MS = 60 * 60 * 1000;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const RATE_LIMIT_MAX = 60;
+const CLIENT_NETWORK_PREFIX = '10.64.';
+const CLIENT_ADDRESS_MIN = 2;
+const CLIENT_ADDRESS_MAX = 254;
 const { servers, devices, allocations } = loadState();
 const rateBuckets = new Map();
 
@@ -57,9 +60,19 @@ function bootstrapServerFromEnv(){
   servers.set(body.id,{id:body.id,name:process.env.VEXA_SERVER_NAME||'VEXA Node 1',countryCode:process.env.VEXA_SERVER_COUNTRY||'IN',city:process.env.VEXA_SERVER_CITY||'Mumbai',hostname:body.hostname,port:body.port,protocol:'wireguard',premium:false,healthy:true,loadPercent:0,latencyMs:Number(process.env.VEXA_SERVER_LATENCY_MS||50),publicKey:body.publicKey,dns:process.env.VEXA_SERVER_DNS||'1.1.1.1',clientNetwork:process.env.VEXA_CLIENT_NETWORK||'10.64.0.0/16'}); persist();
 }
 function allocateAddress(serverId,deviceId){
-  const key=`${serverId}:${deviceId}`; if(allocations.has(key)) return allocations.get(key).address;
+  const key=`${serverId}:${deviceId}`;
+  if(allocations.has(key)) return allocations.get(key).address;
   const used=new Set([...allocations.values()].filter(a=>a.serverId===serverId).map(a=>a.address));
-  for(let i=2;i<65535;i++){ const address=`10.64.${Math.floor(i/254)}.${i%254}`; if(!used.has(address)){ allocations.set(key,{serverId,deviceId,address,applied:false,updatedAt:new Date().toISOString()}); persist(); return address; } }
+  for(let secondOctet=0;secondOctet<256;secondOctet++){
+    for(let host=CLIENT_ADDRESS_MIN;host<=CLIENT_ADDRESS_MAX;host++){
+      const address=`${CLIENT_NETWORK_PREFIX}${secondOctet}.${host}`;
+      if(!used.has(address)){
+        allocations.set(key,{serverId,deviceId,address,applied:false,updatedAt:new Date().toISOString()});
+        persist();
+        return address;
+      }
+    }
+  }
   throw new Error('No client tunnel address is available.');
 }
 function publicServer(server){ const {publicKey,dns,clientNetwork,...safe}=server; return safe; }
