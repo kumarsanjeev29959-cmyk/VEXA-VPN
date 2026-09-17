@@ -77,6 +77,7 @@ async function handler(req,res){
       if(!server||!server.healthy)return json(res,503,{message:'No healthy VPN server is available.'});
       if(!server.publicKey)return json(res,503,{message:'VPN node public key is not configured.'});
       const address=allocateAddress(server.id,device.deviceId,allocations,server.clientNetwork);
+      persist();
       return json(res,200,{server:publicServer(server),peer:{serverPublicKey:server.publicKey,address:`${address}/32`,dns:server.dns,allowedIPs:'0.0.0.0/0, ::/0',persistentKeepalive:25},expiresAt:new Date(Date.now()+CONFIG_TTL_MS).toISOString()});
     }catch(error){return json(res,400,{message:error.message});}
   }
