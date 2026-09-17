@@ -98,5 +98,11 @@ async function handler(req,res){
   return json(res,404,{message:'Not found.'});
 }
 function devicesById(deviceId){ return [...devices.values()].find(d=>d.deviceId===deviceId); }
-bootstrapServerFromEnv();
-http.createServer(handler).listen(PORT,()=>console.log(`VEXA control plane listening on ${PORT}`));
+function startServer() {
+  bootstrapServerFromEnv();
+  return http.createServer(handler).listen(PORT,()=>console.log(`VEXA control plane listening on ${PORT}`));
+}
+
+if (require.main === module) startServer();
+
+module.exports = { handler, startServer };
