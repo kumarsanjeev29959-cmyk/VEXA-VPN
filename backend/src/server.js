@@ -1,6 +1,7 @@
 const http = require('node:http');
 const crypto = require('node:crypto');
 const { loadState, saveState } = require('./store');
+const { validatePublicKey, validateServerInput } = require('./validation');
 
 const PORT = Number(process.env.PORT || 8080);
 const ADMIN_KEY = process.env.VEXA_ADMIN_KEY || '';
@@ -45,13 +46,15 @@ function allowRate(req,res){
   if(bucket.count>RATE_LIMIT_MAX){ res.setHeader('Retry-After','60'); json(res,429,{message:'Too many requests. Please retry later.'}); return false; }
   return true;
 }
-function validatePublicKey(value){ return typeof value==='string' && /^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw48012468]=?$/.test(value); }
 function healthyServers(){ return [...servers.values()].filter(s=>s.healthy); }
 function fastestServer(){ return healthyServers().sort((a,b)=>(a.latencyMs??Number.MAX_SAFE_INTEGER)-(b.latencyMs??Number.MAX_SAFE_INTEGER)||a.loadPercent-b.loadPercent||a.id.localeCompare(b.id))[0]; }
 function bootstrapServerFromEnv(){
   if(!process.env.VEXA_SERVER_ID || !process.env.VEXA_SERVER_HOST) return;
   if(servers.has(process.env.VEXA_SERVER_ID)) return;
-  servers.set(process.env.VEXA_SERVER_ID,{id:process.env.VEXA_SERVER_ID,name:process.env.VEXA_SERVER_NAME||'VEXA Node 1',countryCode:process.env.VEXA_SERVER_COUNTRY||'IN',city:process.env.VEXA_SERVER_CITY||'Mumbai',hostname:process.env.VEXA_SERVER_HOST,port:Number(process.env.VEXA_SERVER_PORT||51820),protocol:'wireguard',premium:false,healthy:true,loadPercent:0,latencyMs:Number(process.env.VEXA_SERVER_LATENCY_MS||50),publicKey:process.env.VEXA_SERVER_PUBLIC_KEY||'',dns:process.env.VEXA_SERVER_DNS||'1.1.1.1',clientNetwork:process.env.VEXA_CLIENT_NETWORK||'10.64.0.0/16'}); persist();
+  const body={id:process.env.VEXA_SERVER_ID,hostname:process.env.VEXA_SERVER_HOST,port:Number(process.env.VEXA_SERVER_PORT||51820),publicKey:process.env.VEXA_SERVER_PUBLIC_KEY||''};
+  const validationError=validateServerInput(body);
+  if(validationError) throw new Error(`Invalid VEXA server environment: ${validationError}`);
+  servers.set(body.id,{id:body.id,name:process.env.VEXA_SERVER_NAME||'VEXA Node 1',countryCode:process.env.VEXA_SERVER_COUNTRY||'IN',city:process.env.VEXA_SERVER_CITY||'Mumbai',hostname:body.hostname,port:body.port,protocol:'wireguard',premium:false,healthy:true,loadPercent:0,latencyMs:Number(process.env.VEXA_SERVER_LATENCY_MS||50),publicKey:body.publicKey,dns:process.env.VEXA_SERVER_DNS||'1.1.1.1',clientNetwork:process.env.VEXA_CLIENT_NETWORK||'10.64.0.0/16'}); persist();
 }
 function allocateAddress(serverId,deviceId){
   const key=`${serverId}:${deviceId}`; if(allocations.has(key)) return allocations.get(key).address;
@@ -94,7 +97,7 @@ async function handler(req,res){
   }
   if(req.method==='POST'&&url.pathname==='/v1/admin/servers'){
     if(!ADMIN_KEY||req.headers['x-vexa-admin-key']!==ADMIN_KEY)return json(res,401,{message:'Unauthorized.'});
-    try{const body=await readJson(req); if(!body.id||!body.hostname)return json(res,400,{message:'id and hostname are required.'}); servers.set(body.id,{...body,protocol:'wireguard',healthy:body.healthy!==false}); persist(); return json(res,201,{ok:true});}
+    try{const body=await readJson(req); const validationError=validateServerInput(body); if(validationError)return json(res,400,{message:validationError}); servers.set(body.id,{...body,port:Number(body.port??51820),protocol:'wireguard',healthy:body.healthy!==false}); persist(); return json(res,201,{ok:true});}
     catch(error){return json(res,400,{message:error.message});}
   }
   return json(res,404,{message:'Not found.'});
