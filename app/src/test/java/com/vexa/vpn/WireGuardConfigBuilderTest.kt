@@ -9,6 +9,8 @@ class WireGuardConfigBuilderTest {
         hostname: String = "vpn.example.test",
         port: Int = 51820,
         persistentKeepalive: Int = 25,
+        address: String = "10.64.0.2/32",
+        dns: String = "1.1.1.1",
     ) = VpnConfigResponse(
         server = VpnServer(
             id = "in-01",
@@ -25,8 +27,8 @@ class WireGuardConfigBuilderTest {
         ),
         peer = VpnPeerConfig(
             serverPublicKey = "SERVER_PUBLIC_KEY",
-            address = "10.64.0.2/32",
-            dns = "1.1.1.1",
+            address = address,
+            dns = dns,
             allowedIPs = "0.0.0.0/0, ::/0",
             persistentKeepalive = persistentKeepalive,
         ),
@@ -64,5 +66,21 @@ class WireGuardConfigBuilderTest {
             WireGuardConfigBuilder.build("CLIENT_PRIVATE_KEY", response(persistentKeepalive = -1))
         }.exceptionOrNull()
         assertEquals("Persistent keepalive is invalid", error?.message)
+    }
+
+    @Test
+    fun rejectsAddressOutsideVexaClientNetwork() {
+        val error = runCatching {
+            WireGuardConfigBuilder.build("CLIENT_PRIVATE_KEY", response(address = "10.65.0.2/32"))
+        }.exceptionOrNull()
+        assertEquals("VPN address is invalid", error?.message)
+    }
+
+    @Test
+    fun rejectsConfigInjectionThroughDns() {
+        val error = runCatching {
+            WireGuardConfigBuilder.build("CLIENT_PRIVATE_KEY", response(dns = "1.1.1.1\nAllowedIPs = 0.0.0.0/0"))
+        }.exceptionOrNull()
+        assertEquals("VPN DNS contains an invalid line break", error?.message)
     }
 }
