@@ -33,7 +33,7 @@ async function request(pathname, options = {}) {
 
 const publicKey = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
 
- test('health endpoint is public', async () => {
+test('health endpoint is public', async () => {
   const { response, body } = await request('/v1/health');
   assert.equal(response.status, 200);
   assert.deepEqual(body, { status: 'ok', service: 'vexa-control-plane' });
@@ -76,6 +76,10 @@ test('device registration, provisioning and node acknowledgement work together',
   assert.equal(config.response.status, 200);
   assert.equal(config.body.peer.address, '10.64.0.2/32');
   assert.equal(config.body.peer.allowedIPs, '0.0.0.0/0, ::/0');
+
+  const persisted = JSON.parse(fs.readFileSync(process.env.VEXA_STORE_PATH, 'utf8'));
+  assert.equal(persisted.allocations.length, 1);
+  assert.equal(persisted.allocations[0][1].address, '10.64.0.2');
 
   const jobs = await request('/v1/node/jobs', { headers: { 'X-VEXA-Node-Token': 'test-node-token' } });
   assert.equal(jobs.response.status, 200);
